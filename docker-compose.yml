@@ -1,0 +1,82 @@
+version: '3'
+
+services:
+  search_service:
+    build:
+      context: ./search_service/docker
+    container_name: ${DJ_WSGI_DOCKER_HOST}
+    restart: unless-stopped
+    environment:
+      DEBUG: ${DEBUG}
+      SECRET_KEY: ${DEVELOPMENT_SECRET_KEY}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      CORS_ORIGIN_WHITELIST: ${CORS_ORIGIN_WHITELIST}
+      DB_DOCKER_ENGINE: ${DB_DOCKER_ENGINE}
+      DB_DOCKER_HOST: ${DB_DOCKER_HOST}
+      DB_DOCKER_NAME: ${DB_DOCKER_NAME}
+      DB_DOCKER_USER: ${DB_DOCKER_USER}
+      DB_DOCKER_PASS: ${DB_DOCKER_PASS}
+      DB_DOCKER_PORT: ${DB_DOCKER_PORT}
+      WSGI_SETTINGS_MODULE: ${WSGI_SETTINGS_MODULE}
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME}
+      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD}
+      DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL}
+    env_file:
+      - ./.env
+    expose:
+      - ${DJ_WSGI_DOCKER_PORT}:${DJ_WSGI_DOCKER_PORT}
+    ports:
+      - ${DJ_WSGI_DOCKER_PORT}:${DJ_WSGI_DOCKER_PORT}
+    volumes:
+      - ./search_service:/var/www/html/
+    entrypoint: ["/entrypoint.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - dev
+    stdin_open: true
+    tty: true
+  postgres:
+    build: ./postgres
+    container_name: ${DB_DOCKER_HOST}
+    restart: unless-stopped
+    environment:
+      DB_DOCKER_ENGINE: ${DB_DOCKER_ENGINE}
+      POSTGRES_DB: ${DB_DOCKER_NAME}
+      POSTGRES_USER: ${DB_DOCKER_USER}
+      POSTGRES_PASSWORD: ${DB_DOCKER_PASS}
+      DB_HOME_SCHEMA_NAME: ${DB_DOCKER_NAME}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    env_file:
+      - ./.env
+    ports:
+      - ${DB_DOCKER_PORT}:${DB_DOCKER_PORT}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - dev
+  nginx:
+    build:
+      context: ./nginx
+    container_name: ${NG_DOCKER_HOST}
+    restart: unless-stopped
+    ports:
+      - ${NG_DOCKER_PORT}:${NG_DOCKER_PORT}
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/servers/default.conf.template:/etc/nginx/templates/default.conf.template
+      - ./nginx/log:/var/log/nginx
+      - ./search_service/static:/var/www/html/static
+    depends_on:
+      - search_service
+    networks:
+      - dev
+volumes:
+  postgres_data:
+networks:
+  dev:
